@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'unsafe-inline'; img-src data:; connect-src 'none'; form-action 'none'; base-uri 'none'">
+<meta name="referrer" content="no-referrer">
+<title>Payout vs 1099 Reconciler: check your form against your own records</title>
+<style>
+  :root { --ink:#1b1f24; --mute:#5b6570; --line:#d9dee3; --ok:#1a7f37; --bad:#c62828; --warn:#9a6700; --bg:#f7f8fa; --accent:#0b5cad; }
+  * { box-sizing: border-box; }
+  body { margin:0; font:15px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; color:var(--ink); background:var(--bg); }
+  main { max-width: 980px; margin: 0 auto; padding: 24px 20px 60px; }
+  h1 { font-size: 28px; margin: 0 0 6px; }
+  h2 { font-size: 18px; margin: 0 0 10px; }
+  .lede { color: var(--mute); margin: 0 0 16px; font-size: 16px; }
+  .disclaimer { border: 2px solid var(--warn); background: #fff8e1; padding: 12px 14px; border-radius: 8px; margin: 0 0 18px; }
+  .disclaimer strong { color: var(--warn); }
+  .privacy { background:#e8f3ff; border:1px solid #b6d4f5; padding:10px 14px; border-radius:8px; margin:0 0 18px; }
+  .card { background:#fff; border:1px solid var(--line); border-radius:10px; padding:16px; margin:0 0 16px; }
+  .drop { border:2px dashed var(--line); border-radius:10px; padding:18px; text-align:center; color:var(--mute); cursor:pointer; }
+  .drop.over { border-color: var(--accent); background:#f0f7ff; }
+  .grid { display:grid; grid-template-columns: repeat(auto-fill, minmax(150px,1fr)); gap:10px; margin-top:10px; }
+  label { font-size:13px; color:var(--mute); display:block; }
+  select, input[type=text], input[type=number] { width:100%; padding:6px 8px; border:1px solid var(--line); border-radius:6px; font:inherit; }
+  button { font:inherit; padding:8px 14px; border-radius:6px; border:1px solid var(--accent); background:var(--accent); color:#fff; cursor:pointer; }
+  button.secondary { background:#fff; color:var(--accent); }
+  .row { display:flex; gap:10px; align-items:end; flex-wrap:wrap; margin-bottom:8px; }
+  .row > div { flex:1 1 160px; }
+  table { border-collapse: collapse; width:100%; font-size:14px; }
+  th, td { text-align:left; padding:6px 8px; border-bottom:1px solid var(--line); vertical-align:top; }
+  td.num, th.num { text-align:right; font-variant-numeric: tabular-nums; }
+  .badge { display:inline-block; padding:1px 8px; border-radius:10px; font-size:12px; font-weight:600; color:#fff; }
+  .MATCH { background: var(--ok); } .MISMATCH { background: var(--bad); } .NO_COLUMN { background: var(--mute); }
+  .flags li { margin-bottom:6px; }
+  .sample-banner { background:#fde7e9; border:1px solid #f3b3ba; padding:8px 12px; border-radius:8px; margin-bottom:12px; font-weight:600; }
+  .hidden { display:none; }
+  .muted { color:var(--mute); font-size:13px; }
+  .error { color: var(--bad); font-weight:600; }
+  footer { color:var(--mute); font-size:13px; margin-top:30px; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Payout vs 1099 Reconciler</h1>
+  <p class="lede">Your platform's earnings summary says one number and your 1099 says another. Drop in your own payout records and type in the amounts printed on your form. You get a plain list of which totals match, which don't, and by how much.</p>
+
+  <div class="disclaimer" id="disclaimer" role="note">
+    <strong>Not tax advice.</strong> This tool only adds up and compares numbers you provide. It does not say which figure to report or file, whether any amount is taxed, or what you owe. For those questions, ask a qualified tax professional.
+  </div>
+  <div class="privacy" id="privacy"><strong>Your files stay on your computer.</strong> Everything runs in this browser tab. Nothing is uploaded, stored, or tracked. No account needed. The page is locked so it cannot make network requests.</div>
+
+  <div id="sampleBanner" class="sample-banner hidden">Showing SAMPLE DATA. These numbers are synthetic, not real earnings. Reload the page to start fresh.</div>
+
+  <section class="card">
+    <h2>1. Your payout records (CSV)</h2>
+    <div class="drop" id="recDrop" tabindex="0">Drop your platform earnings / payout CSV here, or click to choose a file.<input type="file" id="recFile" accept=".csv,text/csv" class="hidden"></div>
+    <p class="muted" id="recInfo"></p>
+    <div id="recMap" class="grid"></div>
+  </section>
+
+  <section class="card">
+    <h2>2. Bank deposits (optional CSV)</h2>
+    <div class="drop" id="depDrop" tabindex="0">Drop a CSV of the deposits that hit your bank account (optional). We compare it with your payout total.<input type="file" id="depFile" accept=".csv,text/csv" class="hidden"></div>
+    <p class="muted" id="depInfo"></p>
+    <div id="depMap" class="grid"></div>
+  </section>
+
+  <section class="card">
+    <h2>3. Amounts printed on your form</h2>
+    <p class="muted">Type each amount exactly as it appears on your 1099 or year-end tax summary, and pick which of your totals to compare it with. Add as many as you need, for example when three different pages show three different totals.</p>
+    <div id="formRows"></div>
+    <div class="row">
+      <button type="button" class="secondary" id="addFig">+ Add a form amount</button>
+      <div style="flex:0 1 180px"><label for="tol">Match tolerance ($)</label><input type="number" id="tol" value="0.01" min="0" step="0.01"></div>
+    </div>
+  </section>
+
+  <div class="row" style="margin-bottom:16px">
+    <button type="button" id="runBtn">Compare</button>
+    <button type="button" class="secondary" id="sampleBtn">Try it with sample data</button>
+  </div>
+
+  <section class="card hidden" id="report">
+    <h2>Report</h2>
+    <p class="disclaimer" style="margin-bottom:12px"><strong>Not tax advice.</strong> Arithmetic on your numbers only.</p>
+    <div id="reportBody"></div>
+    <div class="row" style="margin-top:12px">
+      <button type="button" class="secondary" id="dlTxt">Download report (.txt)</button>
+      <button type="button" class="secondary" id="dlCsv">Download report (.csv)</button>
+    </div>
+  </section>
+
+  <footer>
+    Out of scope: filing, tax calculations, deduction advice, mileage, and connecting to any platform account. Works offline. You can save this page and open it with no internet connection.
+  </footer>
+</main>
+<script src="reconcile.js"></script>
+<script src="sample-data.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
